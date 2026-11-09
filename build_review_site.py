@@ -927,11 +927,22 @@ def main():
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
     os.makedirs(OUT)
+    dest_images = os.path.join(OUT, "images")
+    os.makedirs(dest_images, exist_ok=True)
+    copied = 0
     if os.path.isdir(IMGS):
-        shutil.copytree(IMGS, os.path.join(OUT, "images"))
-    else:
-        os.makedirs(os.path.join(OUT, "images"), exist_ok=True)
-        print("note: no public/images folder yet")
+        for f in os.listdir(IMGS):
+            if f.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg")):
+                shutil.copy2(os.path.join(IMGS, f), os.path.join(dest_images, f))
+                copied += 1
+    # images uploaded through the web UI may sit at the repo root instead
+    for f in os.listdir(HERE):
+        if f.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg")):
+            target = os.path.join(dest_images, f)
+            if not os.path.exists(target):
+                shutil.copy2(os.path.join(HERE, f), target)
+                copied += 1
+    print(f"images copied: {copied}")
 
     open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(build_home())
 
