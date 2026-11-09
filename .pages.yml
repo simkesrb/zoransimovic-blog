@@ -1,0 +1,143 @@
+media:
+  input: public/images
+  output: /images
+
+content:
+  - name: reviews
+    label: Reviews
+    type: collection
+    path: content/reviews
+    format: yaml-frontmatter
+    filename: "{primary}.md"
+    view:
+      primary: product
+      sort: date
+      order: desc
+      search: [product, cat]
+    fields:
+      - name: product
+        label: Product name
+        type: string
+        required: true
+        description: The tool being reviewed. Appears in the title and the CTA.
+      - name: slug
+        label: URL slug
+        type: string
+        required: true
+        pattern: "^[a-z0-9-]+$"
+        description: Lowercase letters, numbers and dashes. Becomes /reviews/<slug>/
+      - name: cat
+        label: Category
+        type: select
+        required: true
+        options:
+          values:
+            - email-marketing
+            - page-builders
+            - social-media
+        description: Decides which category page and nav section it appears under.
+      - name: emoji
+        label: Category emoji
+        type: string
+        description: One emoji shown next to the category. e.g. 📧
+        options:
+          maxlength: 4
+      - name: date
+        label: Publish date
+        type: date
+        required: true
+        options:
+          time: false
+      - name: score
+        label: Overall score (0–10)
+        type: number
+        required: true
+        options:
+          min: 0
+          max: 10
+          step: 0.1
+      - name: badge
+        label: Badge
+        type: string
+        description: Short label, e.g. "Best overall", "Best value".
+      - name: price
+        label: Price
+        type: string
+        description: e.g. "$29/mo"
+      - name: verified
+        label: Testing note
+        type: string
+        description: e.g. "Tested for 60 days". Shown next to your name.
+      - name: tagline
+        label: One-line summary
+        type: text
+        description: Shown under the headline and on the card. One sentence.
+      - name: summary
+        label: Intro paragraph
+        type: text
+        description: The first paragraph of the review itself.
+      - name: image
+        label: Main image
+        type: image
+        description: Upload a screenshot or photo. Stored in public/images.
+      - name: pros
+        label: Pros
+        type: string
+        list: true
+        description: One benefit per line. Emoji welcome.
+      - name: cons
+        label: Cons
+        type: string
+        list: true
+        description: One drawback per line. Be honest — these convert.
+      - name: scores
+        label: Score breakdown
+        type: object
+        list: true
+        fields:
+          - name: name
+            label: Category
+            type: string
+          - name: value
+            label: Score
+            type: number
+            options:
+              min: 0
+              max: 10
+              step: 0.5
+      - name: best_for
+        label: Buy it if…
+        type: text
+      - name: skip_if
+        label: Skip it if…
+        type: text
+      - name: verdict
+        label: Verdict
+        type: text
+        description: Two or three sentences. This is the conclusion box.
+      - name: faq
+        label: FAQ
+        type: object
+        list: true
+        description: Each entry gets FAQ schema, which can appear in Google results.
+        fields:
+          - name: q
+            label: Question
+            type: text
+          - name: a
+            label: Answer
+            type: text
+      - name: affiliate_url
+        label: Affiliate link
+        type: string
+        description: Where the "Check price" button goes. Leave blank until you have it.
+      - name: draft
+        label: Draft (do not publish)
+        type: boolean
+        description: Tick to keep it out of the built site.
+      - name: body
+        label: Long-form review body
+        type: rich-text
+        description: >-
+          The main article: what you tested, screenshots, comparisons.
+          Everything above the FAQ appears here.
