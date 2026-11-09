@@ -978,10 +978,53 @@ def main():
         "# replace pub-0000000000000000 with your AdSense publisher ID\n"
         "google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0\n")
 
-    # redirect map is vendored in the repo as _redirects.src
+    # ---------------------------------------------------------------- redirects
+    # Workers static assets rejects: duplicate routes, wildcard/? patterns beyond
+    # 100 dynamic rules, and encoded characters. Emit a small, strictly valid map.
+    MAX_RULES = 40
+    rules, seen = [], set()
+
+    def add(src, dest):
+        if len(rules) >= MAX_RULES:
+            return
+        if any(c in src for c in "*?%:") or any(c in dest for c in "*?%:"):
+            return                      # skip anything Cloudflare treats as dynamic
+        if not src.startswith("/") or not dest.startswith("/"):
+            return
+        if src in seen or src == dest:
+            return
+        seen.add(src)
+        rules.append(f"{src}  {dest}  301")
+
+    # parking leftovers first (exact path only — no wildcards, they collide)
+    add("/lander", "/")
+
+    # then the most useful legacy URLs: those pointing at a real topic page,
+    # not the generic homepage fallback
     if os.path.exists(INVENTORY):
-        shutil.copy2(INVENTORY, os.path.join(OUT, "_redirects"))
-        print("redirects copied")
+        picked = []
+        with open(INVENTORY, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                src, dest = parts[0], parts[1]
+                if dest == "/":
+                    continue                # homepage fallbacks are low value
+                picked.append((src, dest))
+        for src, dest in picked:
+            add(src, dest)
+
+    if os.path.exists(INVENTORY) and rules:
+        with open(os.path.join(OUT, "_redirects"), "w") as fh:
+            fh.write("# generated redirect map — exact paths only, no wildcards\n")
+            fh.write("\n".join(rules) + "\n")
+        print(f"redirects: {len(rules)} rules")
+    else:
+        print("redirects: none")
 
     print(f"built {len(REVIEWS)} reviews, {len(CATS)} categories, {len(PAGES)} pages -> {OUT}")
 
