@@ -44,6 +44,7 @@ CATS = {
 # Reviews live in content/reviews/*.md — YAML front matter + free-form Markdown body.
 # That means you (or a CMS) can add a review by creating one file. No Python needed.
 CONTENT = os.path.join(HERE, "content", "reviews")
+ROOT = HERE   # loose files from web uploads land here
 
 
 
@@ -144,12 +145,34 @@ def parse_frontmatter(text):
         return _mini_yaml(head)
 
 
+def review_files():
+    """Reviews live in content/reviews/. Files ending -review.md at the repo root
+    are also accepted (they happen when files are uploaded through the web UI)."""
+    found = []
+    if os.path.isdir(CONTENT):
+        found += [os.path.join(CONTENT, f) for f in sorted(os.listdir(CONTENT))
+                  if f.endswith((".md", ".markdown"))]
+    else:
+        print(f"note: {CONTENT} does not exist yet")
+    found += [os.path.join(ROOT, f) for f in sorted(os.listdir(ROOT))
+              if f.endswith("-review.md")]
+    return found
+
+
+def find_image(name):
+    """Images may sit in public/images or at the repo root."""
+    for d in (os.path.join(HERE, "public", "images"), HERE):
+        p = os.path.join(d, name)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
 def load_reviews():
     out = []
-    for fn in sorted(os.listdir(CONTENT)):
-        if not fn.endswith((".md", ".markdown")):
-            continue
-        raw = open(os.path.join(CONTENT, fn), encoding="utf-8").read()
+    for path in review_files():
+        fn = os.path.basename(path)
+        raw = open(path, encoding="utf-8").read()
         if not raw.startswith("---"):
             continue
         end = raw.find("\n---", 3)
@@ -183,6 +206,13 @@ def load_reviews():
         }
         if not r["scores"]:
             r["scores"] = [("Overall", r["score"])]
+        r["has_image"] = find_image(r["image"]) is not None
+        # a sparse entry (saved from the CMS with only a few fields filled) should
+        # still render a sensible page rather than blank boxes
+        if not r["tagline"]:
+            r["tagline"] = r["summary"] or ""
+        if not r["summary"]:
+            r["summary"] = r["tagline"]
         r["cat_name"] = CATS.get(r["cat"], ("Reviews", "⭐", ""))[0]
         r["cat_emoji"] = CATS.get(r["cat"], ("Reviews", "⭐", ""))[1]
         r["url"] = f"/reviews/{r['slug']}/"
@@ -517,9 +547,11 @@ AD = lambda label: f"""<div class="ad"><span>Advertisement</span><div class="ph"
 
 # --------------------------------------------------------------------- pages
 def review_card(r, show_cat=True):
+    thumb = (f'<a href="{r["url"]}" class="thumb"><img src="/images/{r["image"]}"'
+             f' alt="{html.escape(r["product"])} review — {html.escape(r["cat_name"])}"'
+             f' loading="lazy"></a>') if r["has_image"] else ""
     return f"""<article class="card">
-<a href="{r['url']}" class="thumb"><img src="/images/{r['image']}"
-  alt="{html.escape(r['product'])} review — {html.escape(r['cat_name'])}" loading="lazy"></a>
+{thumb}
 <div class="cb">
   <div class="meta">{r['cat_emoji']} {r['cat_name']}</div>
   <h3><a href="{r['url']}">{html.escape(r['product'])} Review {YEAR}: {html.escape(r['badge'])}</a></h3>
@@ -532,6 +564,21 @@ def review_card(r, show_cat=True):
 
 
 def build_home():
+    if not REVIEWS:
+        body = """
+<section class="hero"><div class="wrap">
+  <h1>Reviews are on the way. <span>Add the first one.</span></h1>
+  <p>This site is wired up and ready. Open Pages CMS, click
+     <b>Reviews → Add an entry</b>, fill in the form and save —
+     the first review appears here automatically.</p>
+  <div class="trust">
+    <span>✅ Site builds and deploys on save</span>
+    <span>⚡ Live in about 40 seconds</span>
+  </div>
+</div></section>"""
+        return shell("Reviews coming soon | ZoranReviews",
+                     "Software reviews with real testing, pros and cons.",
+                     body, "/")
     feat = REVIEWS[0]
     others = REVIEWS[1:]
     body = f"""
@@ -620,30 +667,55 @@ def build_review(r):
         f'<div class="a">{html.escape(a)}</div></details>'
         for q, a in r["faq"]
     )
-    toc = "".join(
-        f'<li><a href="#{a}">{html.escape(t)}</a></li>' for a, t in [
-            ("what-is-it", f"What is {r['product']}?"),
-            ("pros-cons", "Pros and cons"),
-            ("scores", "How it scored"),
-            ("who-for", "Who it's for"),
-            ("verdict", "Verdict"),
-            ("faq", "FAQ"),
-        ]
-    )
+    sections = [("what-is-it", f"What is {r['product']}?")]
+    if r["pros"] or r["cons"]:
+        sections.append(("pros-cons", "Pros and cons"))
+    sections += [("scores", "How it scored"), ("who-for", "Who it's for")]
+    if r["verdict"]:
+        sections.append(("verdict", "Verdict"))
+    if r["faq"]:
+        sections.append(("faq", "FAQ"))
+    toc = "".join(f'<li><a href="#{a}">{html.escape(t)}</a></li>' for a, t in sections)
 
     body_html = simple_md(r["body_md"])
+
+    pc_block = ""
+    if r["pros"] or r["cons"]:
+        p_ = "".join(f"<li>{html.escape(x)}</li>" for x in r["pros"]) or "<li>—</li>"
+        c_ = "".join(f"<li>{html.escape(x)}</li>" for x in r["cons"]) or "<li>—</li>"
+        pc_block = (f'<div class="narrow" style="padding-top:0"><div class="pc">'
+                    f'<div class="box pros"><h3>✅ What I liked</h3><ul>{p_}</ul></div>'
+                    f'<div class="box cons"><h3>❌ What I didn\'t</h3><ul>{c_}</ul></div>'
+                    f'</div></div>')
+
+    faq_block = ""
+    if r["faq"]:
+        fq = "".join(f"<details><summary>{html.escape(q)}</summary>"
+                     f'<div class="a">{html.escape(a)}</div></details>' for q, a in r["faq"])
+        faq_block = ('<div class="prose"><h2 id="faq">Frequently asked questions ❓</h2></div>'
+                     f'<div class="faq">{fq}</div>')
+
+    cta_line = ("Best price I found — " + html.escape(r["price"]) + ". The link below supports this site at no extra cost to you."
+                if r["price"] else
+                "The link below supports this site at no extra cost to you.")
+    btn_sub = (html.escape(r["price"]) + " · affiliate link") if r["price"] else "affiliate link"
+    dek = f'<p class="dek">{html.escape(r["tagline"])}</p>' if r["tagline"] else ""
+    summary_p = f'<p>{html.escape(r["summary"])}</p>' if r["summary"] else ""
+    verdict_block = (f'<div class="verdict"><h3>🏁 The verdict</h3>'
+                     f'<p>{html.escape(r["verdict"])}</p></div>') if r["verdict"] else ""
+    hero_img = (f'<div class="hero-img"><img src="/images/{r["image"]}"'
+                f' alt="{html.escape(r["product"])} — review"></div>') if r["has_image"] else ""
     content = f"""
 <div class="wrap arthead">
   <div class="kicker">{r['cat_emoji']} {r['cat_name']}</div>
   <h1>{html.escape(r['product'])} Review {YEAR}: {html.escape(r['badge'])} 🏆</h1>
-  <p class="dek">{html.escape(r['tagline'])}</p>
+  {dek}
   <div class="byline">
     <span>By <b>{SITE}</b></span>
     <span>·</span><span>{r['verified']}</span>
     <span>·</span><span>Updated {YEAR}</span>
   </div>
-  <div class="hero-img"><img src="/images/{r['image']}"
-    alt="{html.escape(r['product'])} dashboard — full review"></div>
+  {hero_img}
 </div>
 
 <div class="narrow" style="padding-top:0">
@@ -657,7 +729,7 @@ def build_review(r):
 
   <div class="prose">
     <h2 id="what-is-it">What is {html.escape(r['product'])}? 🤔</h2>
-    <p>{html.escape(r['summary'])}</p>
+    {summary_p}
     <div class="note"><b>Disclosure:</b> some links on this page are affiliate links.
       If you buy through them I may earn a commission — it never changes the price you pay,
       and it never changes the verdict. <a href="/disclosure">Full disclosure</a>.</div>
@@ -666,18 +738,13 @@ def build_review(r):
   </div>
 </div>
 
-<div class="narrow" style="padding-top:0">
-  <div class="pc">
-    <div class="box pros"><h3>✅ What I liked</h3><ul>{pros}</ul></div>
-    <div class="box cons"><h3>❌ What I didn't</h3><ul>{cons}</ul></div>
-  </div>
-</div>
+{pc_block}
 
 <div class="narrow">
   <div class="cta">
     <h3>Ready to try {html.escape(r['product'])}? 🚀</h3>
-    <p>Best price I found — {html.escape(r['price'])}. The link below supports this site at no extra cost to you.</p>
-    <a class="btn" href="{html.escape(r['affiliate_url'])}" rel="nofollow sponsored">Check price on official site →<small>{html.escape(r['price'])} · affiliate link</small></a>
+    <p>{cta_line}</p>
+    <a class="btn" href="{html.escape(r['affiliate_url'])}" rel="nofollow sponsored">Check price on official site →<small>{btn_sub}</small></a>
   </div>
 
   <div class="prose">
@@ -696,15 +763,11 @@ def build_review(r):
 
   {AD("In-article ad · responsive")}
 
-  <div class="verdict">
-    <h3>🏁 The verdict</h3>
-    <p>{html.escape(r['verdict'])}</p>
-  </div>
+  {verdict_block}
 
   <div class="prose">{body_html}</div>
 
-  <div class="prose"><h2 id="faq">Frequently asked questions ❓</h2></div>
-  <div class="faq">{faq_html}</div>
+  {faq_block}
 </div>
 
 <section class="sec" style="border-top:1px solid var(--line)">
@@ -740,9 +803,10 @@ def build_review(r):
             {"@type": "ListItem", "position": 3, "name": f"{r['product']} Review"},
         ],
     }
+    blocks = [ld_review, ld_crumbs] + ([ld_faq] if r["faq"] else [])
     head = "".join(
         f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>'
-        for x in (ld_review, ld_faq, ld_crumbs)
+        for x in blocks
     )
     return shell(
         f"{r['product']} Review {YEAR}: {r['badge']} (Tested {r['verified']})",
@@ -863,7 +927,11 @@ def main():
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
     os.makedirs(OUT)
-    shutil.copytree(IMGS, os.path.join(OUT, "images"))
+    if os.path.isdir(IMGS):
+        shutil.copytree(IMGS, os.path.join(OUT, "images"))
+    else:
+        os.makedirs(os.path.join(OUT, "images"), exist_ok=True)
+        print("note: no public/images folder yet")
 
     open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(build_home())
 
