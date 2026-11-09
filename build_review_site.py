@@ -154,8 +154,13 @@ def review_files():
                   if f.endswith((".md", ".markdown"))]
     else:
         print(f"note: {CONTENT} does not exist yet")
-    found += [os.path.join(ROOT, f) for f in sorted(os.listdir(ROOT))
-              if f.endswith("-review.md")]
+    # Root-level *-review.md files are legacy demo drafts. They are NOT published:
+    # the CMS only manages content/reviews/, so anything outside it cannot be
+    # edited or deleted from the panel and must not appear on the site.
+    stray = [f for f in sorted(os.listdir(ROOT)) if f.endswith("-review.md")]
+    if stray:
+        print(f"ignoring {len(stray)} file(s) outside {CONTENT}: {', '.join(stray[:4])}"
+              + (" ..." if len(stray) > 4 else ""))
     return found
 
 
