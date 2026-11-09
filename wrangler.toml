@@ -1,0 +1,16 @@
+# Cloudflare Workers static-assets config for zoransimovic.com
+# Place this file at the ROOT of the repo (next to build_review_site.py).
+# Cloudflare runs the build command, then `npx wrangler deploy` publishes ./dist
+# with no Worker script — a pure static site.
+
+name = "zoransimovic-site"
+compatibility_date = "2026-11-09"
+
+[assets]
+directory = "./dist"
+
+# serve 404.html for unknown paths (the build produces one)
+not_found_handling = "404-page"
+
+# keep the hash-based asset URLs off so /images/*.jpg stays at a stable path
+html_handling = "auto-trailing-slash"
